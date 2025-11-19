@@ -1,15 +1,13 @@
+
 # chatbot_ccs.py
 # Protótipo de chatbot FAQ para o Setor de Gestão de Pessoas (CCS/UFPB)
 # Execução: python chatbot_ccs.py
-# Requisitos: Python 3 e a biblioteca Flask (pip install Flask)
+# Requisitos: apenas Python 3 (sem bibliotecas externas)
 
 import sys
 import re
 import unicodedata
 from difflib import SequenceMatcher
-
-# Importações para a interface web
-from flask import Flask, request, jsonify, render_template
 
 BANNER = '''
 ====================================================
@@ -20,7 +18,6 @@ BANNER = '''
   Comandos úteis: "menu", "opções", "listar", "sair"
 ====================================================
 '''
-
 
 def normalize(text: str) -> str:
     """Normaliza texto para comparação: minúsculas, sem acentos,
@@ -37,7 +34,6 @@ def normalize(text: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-
 # Base de conhecimento inicial (mock) — substituir/expandir conforme documentos da PRG/UFPB
 KB = [
     {
@@ -53,9 +49,9 @@ KB = [
         "answer": (
             "FÉRIAS — Informações básicas:\\n"
             "- O agendamento segue o calendário institucional.\\n"
-            "- A solicitação deve ser registrada no sistema SEI conforme orientações da PRG.\\n"
+            "- A solicitação deve ser registrada no sistema SEI conforme orientações da PROGEP.\\n"
             "- Recomenda-se antecedência mínima conforme a norma interna.\\n"
-            "Consulte o manual/portais oficiais da PRG/UFPB para detalhes e prazos."
+            "Consulte o manual/portais oficiais da PROGEP/UFPB para detalhes e prazos."
         ),
     },
     {
@@ -70,9 +66,9 @@ KB = [
         "answer": (
             "PLANO DE TRABALHO — Diretrizes:\\n"
             "- O envio é feito via SEI usando o modelo oficial.\\n"
-            "- Verifique o manual da PRG/UFPB para campos obrigatórios e periodicidade.\\n"
+            "- Verifique o manual da PROGEP/UFPB para campos obrigatórios e periodicidade.\\n"
             "- Guarde o comprovante de protocolo.\\n"
-            "Para links e modelos, consulte o site da PRG."
+            "Para links e modelos, consulte o site da PROGEP."
         ),
     },
     {
@@ -89,7 +85,7 @@ KB = [
             "- Verifique o tipo (capacitação, saúde, interesse, etc.).\\n"
             "- Anexe a documentação exigida conforme o tipo de afastamento.\\n"
             "- Protocole no SEI e acompanhe os prazos.\\n"
-            "As regras completas constam no portal da PRG/UFPB."
+            "As regras completas constam no portal da PROGEP/UFPB."
         ),
     },
     {
@@ -119,7 +115,7 @@ KB = [
         ],
         "answer": (
             "DOCUMENTOS — Acesso público:\\n"
-            "- Os documentos/FAQs estão disponíveis no portal da Pró-Reitoria de Gestão de Pessoas (PRG/UFPB).\\n"
+            "- Os documentos/FAQs estão disponíveis no portal da Pró-Reitoria de Gestão de Pessoas (PROGEP/UFPB).\\n"
             "- Utilize as buscas por tema (férias, plano de trabalho, afastamentos) e verifique as versões atualizadas."
         ),
     },
@@ -142,13 +138,11 @@ MENU = [
     ("Plano de trabalho", "Envio via SEI, modelos e prazos."),
     ("Afastamentos", "Tipos, documentos e protocolo."),
     ("Atendimento/Contato", "Horário e canais institucionais."),
-    ("Documentos públicos", "Onde localizar manuais e normas (PRG/UFPB)."),
+    ("Documentos públicos", "Onde localizar manuais e normas (PROGEP/UFPB)."),
 ]
-
 
 def similar(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
-
 
 def find_best_answer(user_input: str) -> str:
     q = normalize(user_input)
@@ -177,55 +171,40 @@ def find_best_answer(user_input: str) -> str:
     # 3) fallback
     return next(x for x in KB if x["id"] == "fallback")["answer"]
 
+def show_menu():
+    print("\\n=== MENU DE TÓPICOS ===")
+    for i, (titulo, desc) in enumerate(MENU, 1):
+        print(f"{i}. {titulo} — {desc}")
+    print("=======================\\n")
 
-# --- INTEGRAÇÃO WEB COM FLASK ---
+def main():
+    print(BANNER)
+    show_menu()
+    while True:
+        try:
+            user = input("Você: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\\nBot: Até logo!")
+            break
 
-app = Flask(__name__)
+        if not user:
+            print("Bot: Pode repetir por favor?")
+            continue
 
+        cmd = normalize(user)
+        if cmd in {"sair", "exit", "tchau"}:
+            print("Bot: Até logo!")
+            break
 
-# Rota para a página inicial
-@app.route('/')
-def index():
-    """Renderiza o template HTML da interface do chat."""
-    return render_template('index.html')
+        if cmd in {"menu", "opcoes", "opções", "listar"}:
+            show_menu()
+            continue
 
+        answer = find_best_answer(user)
+        print("Bot:", answer)
+        # dica de follow-up
+        if "Não encontrei" in answer:
+            print("Bot: Exemplos: 'como marcar férias', 'plano de trabalho', 'afastamento para capacitação'.")
 
-# Rota para a API do chatbot (processa a mensagem)
-@app.route('/chat', methods=['POST'])
-def chat():
-    """Recebe a mensagem do usuário e retorna a resposta do chatbot."""
-    user_message = request.json.get('message')
-    if not user_message:
-        return jsonify({"answer": "Por favor, digite sua pergunta."})
-
-    normalized_message = normalize(user_message)
-
-    # Processamento de comandos especiais na web
-    if normalized_message in {"sair", "exit", "tchau"}:
-        return jsonify({"answer": "Obrigado por usar o Chatbot. Até logo!"})
-
-    if normalized_message in {"menu", "opcoes", "opções", "listar"}:
-        menu_text = "\\n=== MENU DE TÓPICOS ===\\n"
-        for i, (titulo, desc) in enumerate(MENU, 1):
-            # Usamos \\n para que o JavaScript no frontend possa converter para <br>
-            menu_text += f"{i}. {titulo} — {desc}\\n"
-        menu_text += "=======================\\n"
-        return jsonify({"answer": menu_text})
-
-    # Busca a melhor resposta
-    answer = find_best_answer(user_message)
-
-    # Adiciona a dica de follow-up se for uma resposta de fallback
-    if "Não encontrei" in answer:
-        answer += "\\nExemplos: 'como marcar férias', 'plano de trabalho', 'afastamento para capacitação'."
-
-    return jsonify({"answer": answer})
-
-
-if __name__ == '__main__':
-    # Roda o servidor Flask. Acesse http://127.0.0.1:5000/ no seu navegador.
-    print(BANNER)  # Mantém o banner no console ao iniciar
-    print("Iniciando interface web...")
-    print("Acesse: http://127.0.0.1:5000/")
-    # O modo debug reinicia o servidor automaticamente ao salvar mudanças no código Python.
-    app.run(host='0.0.0.0', debug=True)
+if __name__ == "__main__":
+    main()
